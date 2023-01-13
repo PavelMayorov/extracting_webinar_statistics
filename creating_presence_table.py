@@ -1,32 +1,36 @@
+import typing as tp
+
 import openpyxl
 
-from extract_statistic_to_csv import collection_data_all_events, user_input
-from settings import RED, GREEN, CENTER, logger
+from settings import RED_FILL, GREEN_FILL, CENTERED_TEXT, logger
 
 
-def input_file_name():
-    while True:
-        file_name = input('Введите имя файла, содержащего список студентов (этот файл должен находиться в одной '
-                          'директории с запускаемой программой и иметь расширение ".xlsx") (Пример: имя_файла.xlsx): ')
-        if file_name[-5:] != '.xlsx':
-            logger.error('Неверное расширение файла!')
-        else:
-            return file_name
-
-
-def cell_entry(sheet, row, column, value, fill, alignment=CENTER):
+def cell_entry(sheet, row, column, value, fill=None, alignment=CENTERED_TEXT):
     cell = sheet.cell(row=row, column=column)
     cell.value = value
-    cell.fill = fill
+    if fill:
+        cell.fill = fill
     cell.alignment = alignment
 
 
-def write_to_csv_file(file_name, events_data):
+def write_users_info(data: tp.List[dict], file_name: str) -> None:
+    data = {d['email']: d['name'] for d in data}
+    students_list = openpyxl.Workbook()
+    sheet = students_list.create_sheet('Лист1', 0)
+    sheet.column_dimensions['C'].width = 40
+    sheet.column_dimensions['D'].width = 40
+    for i, (email, name) in enumerate(data.items()):
+        cell_entry(sheet, i + 3, 1, i + 1)
+        cell_entry(sheet, i + 3, 3, name)
+        cell_entry(sheet, i + 3, 4, email)
+    students_list.save(file_name)
+
+
+def write_statistics(events_data: tp.List[dict], file_name: str) -> None:
     try:
         students_list = openpyxl.load_workbook(filename=file_name)
     except Exception as ex:
-        logger.error('Не удалось открыть файл! Проверьте имя файла и его расположение!')
-        logger.error(ex)
+        logger.warning(f'Не удалось открыть файл! Проверьте имя файла и его расположение! \n{ex}')
     else:
         sheet = students_list['Лист1']
         row = 1
@@ -41,24 +45,12 @@ def write_to_csv_file(file_name, events_data):
             while (sheet.cell(row=row+i, column=4).value or sheet.cell(row=row+i+1, column=4).value or
                    sheet.cell(row=row+i+2, column=4).value):
                 if not sheet.cell(row=row+i, column=column).value and sheet.cell(row=row+i, column=4).value:
-                    cell_entry(sheet, row+i, column, 'н', RED)
+                    cell_entry(sheet, row+i, column, 'н', RED_FILL)
                 if event_data['email'].lower() == str(sheet.cell(row=row+i, column=4).value).lower().strip():
-                    if event_data['actual_presence'] == '100,00%' or event_data['actual_presence'] >= '60,00%':
-                        cell_entry(sheet, row+i, column, '+', GREEN)
+                    if event_data['actual_presence'] == '100.00' or event_data['actual_presence'] >= '60.00':
+                        cell_entry(sheet, row+i, column, event_data['actual_presence'], GREEN_FILL)
                     else:
-                        cell_entry(sheet, row+i, column, '-', RED)
+                        cell_entry(sheet, row+i, column, event_data['actual_presence'], RED_FILL)
                 i += 1
         students_list.save(file_name)
         logger.info(f'Данные о мероприятиях успешно сохранены в файл {file_name}.')
-
-
-def main():
-    search_keyword, search_date_from, search_date_to = user_input()
-    events_data = collection_data_all_events(search_keyword, search_date_from, search_date_to)
-    if events_data:
-        file_name = input_file_name()
-        write_to_csv_file(file_name, events_data)
-
-
-if __name__ == '__main__':
-    main()
